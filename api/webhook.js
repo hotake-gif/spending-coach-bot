@@ -1,8 +1,8 @@
 import { Client } from '@line/bot-sdk';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const lineClient = new Client({ channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN });
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const GAS_URL = process.env.GAS_URL;
 
 const SYSTEM_PROMPT = `あなたは支出を厳しく管理する厳格コーチです。
@@ -27,47 +27,47 @@ const SYSTEM_PROMPT = `あなたは支出を厳しく管理する厳格コーチ
 「【記録完了】金額: X円 / カテゴリ: Y / 内容: Z」と返答`;
 
 async function recordExpense(amount, category, description) {
-  if (!GAS_URL) { console.log('GAS_URL not configured'); return false; }
-  try {
-    const response = await fetch(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ amount, category, description, date: new Date().toISOString() })
-    });
-    const result = await response.json();
-    return result.success;
-  } catch (error) { console.error('Failed to record expense:', error); return false; }
+    if (!GAS_URL) { console.log('GAS_URL not configured'); return false; }
+    try {
+          const response = await fetch(GAS_URL, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ amount, category, description, date: new Date().toISOString() })
+          });
+          const result = await response.json();
+          return result.success;
+    } catch (error) { console.error('Failed to record expense:', error); return false; }
 }
 
 function parseRecordCommand(text) {
-  const match = text.match(/^記録[:：]\s*(\d+)円?\s+(\S+)\s+(.+)/);
-  if (match) { return { amount: parseInt(match[1]), category: match[2], description: match[3] }; }
-  return null;
+    const match = text.match(/^記録[:：]\s*(\d+)円?\s+(\S+)\s+(.+)/);
+    if (match) { return { amount: parseInt(match[1]), category: match[2], description: match[3] }; }
+    return null;
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).end();
-  const events = req.body.events || [];
-  for (const event of events) {
-    if (event.type === 'message' && event.message.type === 'text') {
-      const userText = event.message.text;
-      const recordData = parseRecordCommand(userText);
-      if (recordData) {
-        const success = await recordExpense(recordData.amount, recordData.category, recordData.description);
-        const replyText = success
-          ? `【記録完了】\n金額: ${recordData.amount}円\nカテゴリ: ${recordData.category}\n内容: ${recordData.description}\n\n引き続き支出管理を徹底しましょう！`
-          : `【記録失敗】システムエラーが発生しました。再度お試しください。`;
-        await lineClient.replyMessage(event.replyToken, { type: 'text', text: replyText });
-        continue;
-      }
-      const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 500,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: userText }],
-      });
-      await lineClient.replyMessage(event.replyToken, { type: 'text', text: response.content[0].text });
+    if (req.method !== 'POST') return res.status(405).end();
+    const events = req.body.events || [];
+    for (const event of events) {
+          if (event.type === 'message' && event.message.type === 'text') {
+                  const userText = event.message.text;
+                  const recordData = parseRecordCommand(userText);
+                  if (recordData) {
+                            const success = await recordExpense(recordData.amount, recordData.category, recordData.description);
+                            const replyText = success
+                              ? `【記録完了】\n金額: ${recordData.amount}円\nカテゴリ: ${recordData.category}\n内容: ${recordData.description}\n\n引き続き支出管理を徹底しましょう！`
+                                        : `【記録失敗】システムエラーが発生しました。再度お試しください。`;
+                            await lineClient.replyMessage(event.replyToken, { type: 'text', text: replyText });
+                            continue;
+                  }
+                  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+                  const chat = model.startChat({
+                            history: [{ role: 'user', parts: [{ text: SYSTEM_PROMPT }] }, { role: 'model', parts: [{ text: '了解しました。厳格コーチとして支出管理をサポートします。' }] }],
+                  });
+                  const result = await chat.sendMessage(userText);
+                  const responseText = result.response.text();
+                  await lineClient.replyMessage(event.replyToken, { type: 'text', text: responseText });
+          }
     }
-  }
-  res.status(200).end();
+    res.status(200).end();
 }
