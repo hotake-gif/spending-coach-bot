@@ -1,0 +1,9 @@
+{
+    "name": "spending-coach-bot",
+    "version": "1.0.0",
+    "type": "module",
+    "dependencies": {
+          "@anthropic-ai/sdk": "^0.72.1",
+          "@line/bot-sdk": "^10.6.0"
+    }
+}
