@@ -49,7 +49,7 @@ const SYSTEM_PROMPT = `あなたは「厳格コーチ」。ユーザーの支出
 ユーザー「3000円のセミナー行きたい」
 →「週予算2万の15%だぞ。そのセミナーで何を得る？具体的に売上にどう繋がる？答えられないなら行くな。」`;
 
-// Groq APIを呼び出す
+// Groq APIを呼び出す（モデル: llama-3.3-70b-versatile）
 async function callGroqAPI(userMessage) {
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
@@ -58,7 +58,7 @@ async function callGroqAPI(userMessage) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'llama-3.1-70b-versatile',
+      model: 'llama-3.3-70b-versatile',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userMessage }
@@ -110,6 +110,7 @@ export default async function handler(req, res) {
         const userMessage = event.message.text;
         let reply;
 
+        // 記録コマンドの処理（半角・全角コロン両対応）
         if (userMessage.startsWith('記録:') || userMessage.startsWith('記録：')) {
           const content = userMessage.replace(/^記録[:：]/, '').trim();
           const match = content.match(/(\d+)円?\s*(.+)?/);
@@ -122,6 +123,7 @@ export default async function handler(req, res) {
             reply = '記録形式が不正。\n例: 記録:500円 ランチ';
           }
         } else {
+          // AI応答
           try {
             reply = await callGroqAPI(userMessage);
           } catch (error) {
