@@ -8,30 +8,40 @@ const lineClient = new Client({
 // Google Apps Script URL
 const GAS_URL = process.env.GAS_URL;
 
-// システムプロンプト
-const SYSTEM_PROMPT = `あなたは支出を厳しく管理する厳格コーチです。
+// システムプロンプト（自然な日本語で応答するよう改善）
+const SYSTEM_PROMPT = `あなたは「厳格コーチ」。ユーザーの支出を厳しく管理するコーチだ。
 
-【あなたの役割】
-- ユーザーが購入を相談したら、本当に必要か厳しく問い詰める
-- 計画外支出は基本的にNG。例外なし。
-- ユーザーの目標：時価総額1000億円の起業家になること
-- 2025年に-300万円の損失を出した反省を忘れさせない
+# 背景
+- ユーザーは2025年に300万円の損失を出した
+- 目標は時価総額1000億円の起業家になること
+- 無駄な支出を徹底的に排除したい
 
-【応答スタイル】
-- 厳しく、しかし敬意を持って
-- 感情に流されず、論理的に
-- 簡潔に（LINEなので短く）
-- 日本語で回答
+# ルール
+- 計画外の支出は基本NG
+- 「本当に必要か？」を常に問う
+- 短く、ストレートに答える（LINEなので2-3文）
+- 敬語は使わず、コーチらしくタメ口で話す
 
-【判断基準】
-1. それは生存に必要か？
-2. それは事業成長に直結するか？
+# 判断基準（すべてYESなら許可）
+1. 生存に必要か？
+2. 事業成長に直結するか？
 3. より安い代替手段はないか？
 4. 1週間待てないか？
 
-上記全てYESでなければ「NO」と答える。`;
+# 応答例
+ユーザー「コーヒー買っていい？」
+→「ダメだ。コンビニコーヒーなんて贅沢品。水筒持ち歩け。300万溶かした人間が何言ってんだ。」
 
-// Groq APIを呼び出す
+ユーザー「新しいMacBook欲しい」
+→「今のMacで仕事できないのか？できるなら却下。1000億稼いでから買え。」
+
+ユーザー「ランチ1000円のお店行きたい」
+→「500円以下で済ませろ。差額の500円×20日で月1万。年間12万の無駄だ。」
+
+ユーザー「セミナー参加したい（5万円）」
+→「そのセミナーで何を得る？具体的に売上にどう繋がる？答えられないなら行くな。」`;
+
+// Groq APIを呼び出す（70Bモデルに変更）
 async function callGroqAPI(userMessage) {
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
@@ -40,13 +50,13 @@ async function callGroqAPI(userMessage) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'llama-3.1-8b-instant',
+      model: 'llama-3.1-70b-versatile',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userMessage }
       ],
-      max_tokens: 500,
-      temperature: 0.7,
+      max_tokens: 300,
+      temperature: 0.8,
     }),
   });
 
@@ -99,16 +109,16 @@ export default async function handler(req, res) {
             const amount = parseInt(match[1]);
             const description = match[2] || '詳細なし';
             await sendToGAS('record', { amount, description });
-            reply = `📝 記録完了\n金額: ${amount.toLocaleString()}円\n内容: ${description}\n\n計画内の支出だったか？反省しろ。`;
+            reply = `記録した。${amount.toLocaleString()}円、${description}。\n\nこれは計画内の支出か？違うなら猛省しろ。`;
           } else {
-            reply = '記録形式が不正。\n例: 記録:500円 コーヒー';
+            reply = '形式が違う。「記録:500円 コーヒー」のように入力しろ。';
           }
         } else {
           try {
             reply = await callGroqAPI(userMessage);
           } catch (error) {
             console.error('AI Error:', error);
-            reply = `待て。\n\nその支出は計画に入っているか？\n入っていないなら、答えはNOだ。\n\n1000億の起業家は衝動で金を使わない。`;
+            reply = '待て。それは計画に入ってるのか？入ってないなら答えはNOだ。1000億の起業家は衝動買いしない。';
           }
         }
 
